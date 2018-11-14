@@ -25,8 +25,13 @@ instance Applicative M where
       let (a', st', str') = unStOut ma st in (a a', st', str'))
 
 instance Monad M where
+  -- (return) :: a -> Ma
+  return x = StOut (\s -> (x, s, ""))
+
   -- (>>=) :: M a -> (a -> M b) -> M b
-  ma >>= f = StOut (\s -> let (a, s', str) = unStOut ma s in unStOut (f a) s')
+  ma >>= f = StOut (\s -> let (a, s1, str1) = (unStOut ma) s 
+                              (b, s2, str2) = unStOut (f a) s
+                              in (b, s2, str1++str2))
 
 -- Declaring AST
 
@@ -66,5 +71,3 @@ positionAux name (n:ns) counter = if name == n
 fetch :: Location -> Stack -> Int
 fetch n (s:ss) = if n == 1 then s
                  else fetch (n-1) ss
-
-put :: Location -> Int -> Stack -> Stack
