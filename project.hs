@@ -1,11 +1,9 @@
 import System.IO
 import Data.Char
 
-type Location = Int
-type Index = [String]
-type Stack = [Int]
+type Env = [(String, Int)]
 
-newtype M a = StOut (Stack -> (a, Stack, String))
+newtype M a = StOut (Env -> (a, Env, String))
 
 unStOut (StOut f) = f
 
@@ -26,7 +24,7 @@ instance Applicative M where
 
 instance Monad M where
   -- (return) :: a -> Ma
-  return x = StOut (\s -> (x, s, ""))
+  return x = pure x
 
   -- (>>=) :: M a -> (a -> M b) -> M b
   ma >>= f = StOut (\s -> let (a, s1, str1) = (unStOut ma) s 
@@ -50,24 +48,23 @@ data Com = Assign String Exp
   | Print Exp
   deriving Show
 
-{--
-position :: String -> Index -> Location
-position name index = let
-  pos n (nm:nms) = if name == nm
-                   then n
-                   else pos (n+1) nms
-  in pos 1 index
---}
+position :: String -> Env -> Int
+position name env = positionAux name env 1
 
-position :: String -> Index -> Location
-position name i = positionAux name i 1
-
-positionAux :: String -> Index -> Int -> Location
+positionAux :: String -> Env -> Int -> Int
 positionAux _ [] _ = -1
-positionAux name (n:ns) counter = if name == n
+positionAux name ((n, v):ns) counter = if name == n
                                 then counter
                                 else positionAux name ns (counter+1)
 
-fetch :: Location -> Stack -> Int
-fetch n (s:ss) = if n == 1 then s
+fetch :: Int -> Env -> Int
+fetch _ [] = -1
+fetch n ((k, v):ss) = if n == 1 then v
                  else fetch (n-1) ss
+
+getFrom :: String -> Env -> M Int
+getFrom v env = StOut (\s -> ((fetch (position v env) env), s,[]))
+
+eval1 :: Exp -> Env -> M Int
+eval1 exp env = case exp of
+  Constant n -> return n
