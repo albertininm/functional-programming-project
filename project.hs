@@ -36,6 +36,7 @@ instance Monad M where
 data Exp = Constant Int 
   | Variable String
   | Minus Exp Exp
+  | Plus Exp Exp
   | Greater Exp Exp
   | Times Exp Exp
   deriving Show
@@ -68,3 +69,20 @@ getFrom v env = StOut (\s -> ((fetch (position v env) env), s,[]))
 eval1 :: Exp -> Env -> M Int
 eval1 exp env = case exp of
   Constant n -> return n
+  Variable x -> getFrom x env
+  Minus exp1 exp2 -> do
+    val1 <- (eval1 exp1 env)
+    val2 <- (eval1 exp2 env)
+    return (val1 - val2)
+  Plus exp1 exp2 -> do
+    val1 <- (eval1 exp1 env)
+    val2 <- (eval1 exp2 env)
+    return (val1 + val2)
+  Greater exp1 exp2 -> do
+    val1 <- (eval1 exp1 env)
+    val2 <- (eval1 exp2 env)
+    return (max val1 val2)
+  Times exp1 exp2 -> do
+      val1 <- (eval1 exp1 env)
+      val2 <- (eval1 exp2 env)
+      return (val1 * val2)
