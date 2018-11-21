@@ -113,3 +113,29 @@ exec stmt env = case stmt of
     y <- exec cmd2 env;
     return ()
   }
+  Print exp -> do {
+    res <- eval1 exp env;
+    output res;
+  }
+  Declare var exp cmd -> do {
+    val <- eval1 exp env;
+    write var val env;
+    x <- exec cmd env;
+    return ()
+  }
+  Cond exp cmd1 cmd2 -> do {
+    val <- eval1 exp env;
+    if val /= 0
+      then exec cmd1 env;
+      else exec cmd2 env;
+  }
+  While exp cmd -> do {
+    val <- eval1 exp env;
+    if val /= 0
+      then exec cmd env;
+      else return ()
+  }
+
+
+output :: Show a => a -> M()
+output v = StOut (\n -> ((), n, show v))
