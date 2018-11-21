@@ -66,23 +66,50 @@ fetch n ((k, v):ss) = if n == 1 then v
 getFrom :: String -> Env -> M Int
 getFrom v env = StOut (\s -> ((fetch (position v env) env), s,[]))
 
+write :: String -> Int -> Env -> M ()
+write var val env = do
+  StOut (\s -> let updatedEnv = writeValue var val env in (val, updatedEnv, ""))
+  return ()
+
+writeValue :: String -> Int -> Env -> Env
+writeValue var val [] = [(var, val)]
+writeValue var val ((name, value):ss) | (name == var) = ((var, val):ss)
+                                      | otherwise = [(name, value)] ++ (writeValue var val ss)
+
 eval1 :: Exp -> Env -> M Int
 eval1 exp env = case exp of
   Constant n -> return n
   Variable x -> getFrom x env
-  Minus exp1 exp2 -> do
-    val1 <- (eval1 exp1 env)
-    val2 <- (eval1 exp2 env)
+  Minus exp1 exp2 -> do {
+    val1 <- (eval1 exp1 env);
+    val2 <- (eval1 exp2 env);
     return (val1 - val2)
-  Plus exp1 exp2 -> do
-    val1 <- (eval1 exp1 env)
-    val2 <- (eval1 exp2 env)
+  }
+  Plus exp1 exp2 -> do {
+    val1 <- (eval1 exp1 env);
+    val2 <- (eval1 exp2 env);
     return (val1 + val2)
-  Greater exp1 exp2 -> do
-    val1 <- (eval1 exp1 env)
-    val2 <- (eval1 exp2 env)
+  }
+  Greater exp1 exp2 -> do {
+    val1 <- (eval1 exp1 env);
+    val2 <- (eval1 exp2 env);
     return (max val1 val2)
-  Times exp1 exp2 -> do
-      val1 <- (eval1 exp1 env)
-      val2 <- (eval1 exp2 env)
+  }
+  Times exp1 exp2 -> do {
+      val1 <- (eval1 exp1 env);
+      val2 <- (eval1 exp2 env);
       return (val1 * val2)
+  }
+
+exec :: Com -> Env -> M ()
+exec stmt env = case stmt of
+  Assign var exp -> do {
+    res <- eval1 exp env;
+    write var res env;
+    return ()
+  }
+  Seq cmd1 cmd2 -> do {
+    x <- exec cmd1 env;
+    y <- exec cmd2 env;
+    return ()
+  }
