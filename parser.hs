@@ -6,39 +6,24 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 
-data BExpr = BoolConst Bool
-           | Not BExpr
-           | BBinary BBinOp BExpr BExpr
-           | RBinary RBinOp AExpr AExpr
-            deriving (Show)
 
-data BBinOp = And | Or deriving (Show)
+data Exp = ExpC Op Exp Exp | Var String | Number Integer deriving Show
+data Op = Greater | Less | Equals | Plus | Minus | Times | Divide deriving Show
 
-data RBinOp = Greater | Less deriving (Show)
+data Com = Assign String Exp
+  | Declare String Exp Com
+  | Seq Com Com
+  | IfElse Exp Com Com
+  | While Exp Com
+  | Print Exp
+  deriving Show
 
-data AExpr = Var String
-           | IntConst Integer
-           | Neg AExpr
-           | ABinary ABinOp AExpr AExpr
-             deriving (Show)
-
-data ABinOp = Add
-            | Subtract
-            | Multiply
-            | Divide
-              deriving (Show)
-
-data Stmt = Seq [Stmt]
-          | Assign String AExpr
-          | If BExpr Stmt Stmt
-          | While BExpr Stmt
-          | Skip
-            deriving (Show)
+  
 
 languageDef =
-   emptyDef { Token.commentStart    = "/*"
-            , Token.commentEnd      = "*/"
-            , Token.commentLine     = "//"
+   emptyDef { Token.commentStart    = "{-"
+            , Token.commentEnd      = "-}"
+            , Token.commentLine     = "--"
             , Token.identStart      = letter
             , Token.identLetter     = alphaNum
             , Token.reservedNames   = [ "if"
@@ -46,15 +31,13 @@ languageDef =
                                       , "else"
                                       , "while"
                                       , "do"
-                                      , "skip"
-                                      , "true"
-                                      , "false"
-                                      , "not"
-                                      , "and"
-                                      , "or"
+                                      , "declare"
+                                      , "in"
+                                      , "print"
+
                                       ]
-            , Token.reservedOpNames = ["+", "-", "*", "/", ":="
-                                      , "<", ">", "and", "or", "not"
+            , Token.reservedOpNames = ["+", "-", "*", "/", "=", ":="
+                                      , "<", ">"
                                       ]
             }
 
@@ -63,105 +46,68 @@ lexer = Token.makeTokenParser languageDef
 identifier = Token.identifier lexer -- parses an identifier
 reserved   = Token.reserved   lexer -- parses a reserved name
 reservedOp = Token.reservedOp lexer -- parses an operator
-parens     = Token.parens     lexer -- parses surrounding parenthesis:
-                                    --   parens p
+braces     = Token.braces     lexer -- parses surrounding parenthesis:
+                                    --   braces p
                                     -- takes care of the parenthesis and
                                     -- uses p to parse what's inside them
+parens     = Token.parens     lexer -- parses surrounding parenthesis:
+                                    --   braces p
+                                    -- takes care of the parenthesis and
+                                    -- uses p to parse what's inside them
+
 integer    = Token.integer    lexer -- parses an integer
 semi       = Token.semi       lexer -- parses a semicolon
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 
-whileParser :: Parser Stmt
-whileParser = whiteSpace >> statement
+initParser :: Parser Com
+initParser = whiteSpace >> sequenceOfCom
 
-statement :: Parser Stmt
-statement =   parens statement
-          <|> sequenceOfStmt
- 
-sequenceOfStmt =
-  do list <- (sepBy1 statement' semi)
-     -- If there's only one statement return it without using Seq.
-     return $ if length list == 1 then head list else Seq list
+comParser :: Parser Com
+comParser = braces sequenceOfCom
+            <|> statement
 
-statement' :: Parser Stmt
-statement' =   ifStmt
-           <|> whileStmt
-           <|> skipStmt
-           <|> assignStmt
-		   
-ifStmt :: Parser Stmt
-ifStmt =
-  do reserved "if"
-     cond  <- bExpression
-     reserved "then"
-     stmt1 <- statement
-     reserved "else"
-     stmt2 <- statement
-     return $ If cond stmt1 stmt2
- 
-whileStmt :: Parser Stmt
-whileStmt =
-  do reserved "while"
-     cond <- bExpression
-     reserved "do"
-     stmt <- statement
-     return $ While cond stmt
+sequenceOfCom :: Parser Com
+sequenceOfCom =
+  do list <- (sepBy1 statement semi)
+     return $ Seq (head list) (head (tail list))
 
-assignStmt :: Parser Stmt
+
+statement :: Parser Com
+statement = assignStmt
+
+assignStmt :: Parser Com
 assignStmt =
   do var  <- identifier
      reservedOp ":="
-     expr <- aExpression
+     expr <- coreExpression
      return $ Assign var expr
- 
-skipStmt :: Parser Stmt
-skipStmt = reserved "skip" >> return Skip
 
-aExpression :: Parser AExpr
-aExpression = buildExpressionParser aOperators aTerm
+coreExpression :: Parser Exp
+coreExpression = buildExpressionParser operators expression
 
-bExpression :: Parser BExpr
-bExpression = buildExpressionParser bOperators bTerm
+operators = [[Infix (reservedOp ">" >> return (ExpC Greater)) AssocLeft],
+			 [Infix (reservedOp "<" >> return (ExpC Less)) AssocLeft],
+			 [Infix (reservedOp "=" >> return (ExpC Equals)) AssocLeft],
+			 [Infix (reservedOp "+" >> return (ExpC Plus)) AssocLeft],
+			 [Infix (reservedOp "-" >> return (ExpC Minus)) AssocLeft],
+			 [Infix (reservedOp "*" >> return (ExpC Times)) AssocLeft],
+			 [Infix (reservedOp "/" >> return (ExpC Divide)) AssocLeft]]
 
-aOperators = [ [Prefix (reservedOp "-"   >> return (Neg             ))          ]
-             , [Infix  (reservedOp "*"   >> return (ABinary Multiply)) AssocLeft,
-                Infix  (reservedOp "/"   >> return (ABinary Divide  )) AssocLeft]
-             , [Infix  (reservedOp "+"   >> return (ABinary Add     )) AssocLeft,
-                Infix  (reservedOp "-"   >> return (ABinary Subtract)) AssocLeft]
-              ]
- 
-bOperators = [ [Prefix (reservedOp "not" >> return (Not             ))          ]
-             , [Infix  (reservedOp "and" >> return (BBinary And     )) AssocLeft,
-                Infix  (reservedOp "or"  >> return (BBinary Or      )) AssocLeft]
-             ]
-
-aTerm =  parens aExpression
-     <|> liftM Var identifier
-     <|> liftM IntConst integer
-	 
-bTerm =  parens bExpression
-     <|> (reserved "true"  >> return (BoolConst True ))
-     <|> (reserved "false" >> return (BoolConst False))
-     <|> rExpression
-	 
-rExpression =
-  do a1 <- aExpression
-     op <- relation
-     a2 <- aExpression
-     return $ RBinary op a1 a2
- 
-relation =   (reservedOp ">" >> return Greater)
-         <|> (reservedOp "<" >> return Less)
-
-parseString :: String -> Stmt
+expression :: Parser Exp
+expression = parens coreExpression 
+		 <|>liftM Var identifier
+		 <|> liftM Number integer
+		 
+parseString :: String -> Com
 parseString str =
-  case parse whileParser "" str of
+  case parse initParser "" str of
     Left e  -> error $ show e
     Right r -> r
  
-parseFile :: String -> IO Stmt
+parseFile :: String -> IO Com
 parseFile file =
   do program  <- readFile file
-     case parse whileParser "" program of
+     case parse initParser "" program of
        Left e  -> print e >> fail "parse error"
        Right r -> return r
+-- ast <- parseFile "<filename>"
