@@ -70,78 +70,80 @@ comParser = braces sequenceOfCom
 
 sequenceOfCom :: Parser Com
 sequenceOfCom =
-	do
-	list <- (sepBy1 statement semi)
-	return $ if length list == 1 then head list else Seq list
+  do
+  list <- (sepBy1 statement semi)
+  return $ if length list == 1 then head list else Seq list
 
 statement :: Parser Com
 statement = assignStmt
-		<|> ifElseStmt
-		<|> whileStmt
-		<|> declareStmt
+  <|> ifElseStmt
+  <|> whileStmt
+  <|> declareStmt
+  <|> printeStmt
 
 assignStmt :: Parser Com
 assignStmt =
-  do var  <- identifier
-     reservedOp ":="
-     expr <- coreExpression
-     return $ Assign var expr
-	 
+  do
+  var  <- identifier
+  reservedOp ":="
+  expr <- coreExpression
+  return $ Assign var expr
+
 ifElseStmt :: Parser Com
 ifElseStmt = 
-	do
-	reserved "if"
-	expr <- coreExpression
-	reserved "then"
-	seqCom1 <- comParser
-	reserved "else"
-	seqCom2 <- comParser
-	return $ IfElse expr seqCom1 seqCom2
+  do
+  reserved "if"
+  expr <- coreExpression
+  reserved "then"
+  seqCom1 <- comParser
+  reserved "else"
+  seqCom2 <- comParser
+  return $ IfElse expr seqCom1 seqCom2
 
 whileStmt :: Parser Com
 whileStmt =
-	do
-	reserved "while"
-	expr <- coreExpression
-	reserved "do"
-	seqCom <- comParser
-	return $ While expr seqCom
+  do
+  reserved "while"
+  expr <- coreExpression
+  reserved "do"
+  seqCom <- comParser
+  return $ While expr seqCom
 
 declareStmt :: Parser Com
 declareStmt =
-	do
-	reserved "declare"
-	str <- identifier
-	reserved "="
-	expr <- coreExpression
-	reserved "in"
-	seqCom <- comParser
-	return $ Declare str expr seqCom
-	
+  do
+  reserved "declare"
+  str <- identifier
+  reserved "="
+  expr <- coreExpression
+  reserved "in"
+  seqCom <- comParser
+  return $ Declare str expr seqCom
+
 printeStmt :: Parser Com
 printeStmt =
-	do
-	reserved "printe"
-	expr <- coreExpression
-	return $ Printe expr
-	
+  do
+  reserved "printe"
+  expr <- coreExpression
+  return $ Printe expr
+
 
 coreExpression :: Parser Exp
 coreExpression = buildExpressionParser operators expression
 
 operators = [[Infix (reservedOp ">" >> return (ExpC Greater)) AssocLeft],
-			 [Infix (reservedOp "<" >> return (ExpC Less)) AssocLeft],
-			 [Infix (reservedOp "=" >> return (ExpC Equals)) AssocLeft],
-			 [Infix (reservedOp "+" >> return (ExpC Plus)) AssocLeft],
-			 [Infix (reservedOp "-" >> return (ExpC Minus)) AssocLeft],
-			 [Infix (reservedOp "*" >> return (ExpC Times)) AssocLeft],
-			 [Infix (reservedOp "/" >> return (ExpC Divide)) AssocLeft]]
+  [Infix (reservedOp "<" >> return (ExpC Less)) AssocLeft],
+  [Infix (reservedOp "=" >> return (ExpC Equals)) AssocLeft],
+  [Infix (reservedOp "+" >> return (ExpC Plus)) AssocLeft],
+  [Infix (reservedOp "-" >> return (ExpC Minus)) AssocLeft],
+  [Infix (reservedOp "*" >> return (ExpC Times)) AssocLeft],
+  [Infix (reservedOp "/" >> return (ExpC Divide)) AssocLeft]]
 
 expression :: Parser Exp
 expression = parens coreExpression 
-		 <|>liftM Var identifier
-		 <|> liftM Number integer
-		 
+  <|>liftM Var identifier
+  <|> liftM Number integer
+
 parseString :: String -> Com
 parseString str =
   case parse initParser "" str of
@@ -160,7 +162,7 @@ parseFile file =
 
 
 
-type Env = [(String, Int)]
+type Env = [(String, Integer)]
 
 newtype M a = StOut (Env -> (a, Env, String))
 
@@ -191,36 +193,36 @@ instance Monad M where
                               in (b, s2, str1++str2))
 
 
-position :: String -> Env -> Int
+position :: String -> Env -> Integer
 position name env = positionAux name env 1
 
-positionAux :: String -> Env -> Int -> Int
+positionAux :: String -> Env -> Integer -> Integer
 positionAux _ [] _ = -1
 positionAux name ((n, v):ns) counter = if name == n
                                 then counter
                                 else positionAux name ns (counter+1)
 
-fetch :: Int -> Env -> Int
+fetch :: Integer -> Env -> Integer
 fetch _ [] = -1
 fetch n ((k, v):ss) = if n == 1 then v
                  else fetch (n-1) ss
 
-getFrom :: String -> Env -> M Int
+getFrom :: String -> Env -> M Integer
 getFrom v env = StOut (\s -> ((fetch (position v env) env), s,[]))
 
-write :: String -> Int -> Env -> M ()
+write :: String -> Integer -> Env -> M ()
 write var val env = do
   StOut (\s -> let updatedEnv = writeValue var val env in (val, updatedEnv, ""))
   return ()
 
-writeValue :: String -> Int -> Env -> Env
+writeValue :: String -> Integer -> Env -> Env
 writeValue var val [] = [(var, val)]
 writeValue var val ((name, value):ss) | (name == var) = ((var, val):ss)
                                       | otherwise = [(name, value)] ++ (writeValue var val ss)
 
-eval1 :: Exp -> Env -> M Int
+eval1 :: Exp -> Env -> M Integer
 eval1 exp env = case exp of
- |  | Equals | Plus | Minus | Times | Divide 
+  Number n -> return n
   Var x -> getFrom x env
   ExpC Minus exp1 exp2 -> do {
     val1 <- (eval1 exp1 env);
@@ -235,17 +237,17 @@ eval1 exp env = case exp of
   ExpC Greater exp1 exp2 -> do {
     val1 <- (eval1 exp1 env);
     val2 <- (eval1 exp2 env);
-    return (val1 > val2)
+    return (if val1 > val2 then 1 else 0)
   }
   ExpC Less exp1 exp2 -> do {
     val1 <- (eval1 exp1 env);
     val2 <- (eval1 exp2 env);
-    return (val1 < val2)
+    return (if val1 < val2 then 1 else 0)
   }
   ExpC Equals exp1 exp2 -> do {
     val1 <- (eval1 exp1 env);
     val2 <- (eval1 exp2 env);
-    return (val1 == val2)
+    return (if val1 == val2 then 1 else 0)
   }
   ExpC Times exp1 exp2 -> do {
       val1 <- (eval1 exp1 env);
@@ -255,7 +257,7 @@ eval1 exp env = case exp of
   ExpC Divide exp1 exp2 -> do {
       val1 <- (eval1 exp1 env);
       val2 <- (eval1 exp2 env);
-      return (val1 / val2)
+      return (quot val1 val2)
   }
 
 exec :: Com -> Env -> M ()
@@ -265,8 +267,9 @@ exec stmt env = case stmt of
     write var res env;
     return ()
   }
-  Seq cmdList -> do {
-	[exec cmd env | cmd<-cmdList]
+  Seq (x:y:zs) -> do {
+    x <- exec x env;
+    y <- exec y env;
     return ()
   }
   Printe exp -> do {
@@ -287,7 +290,7 @@ exec stmt env = case stmt of
   }
   While exp cmd -> do {
     val <- eval1 exp env;
-    if val == True
+    if val == 1
       then exec cmd env;
       else return ()
   }
@@ -295,3 +298,5 @@ exec stmt env = case stmt of
 
 output :: Show a => a -> M()
 output v = StOut (\n -> ((), n, show v))
+
+interp a = unStOut (exec a []) []
