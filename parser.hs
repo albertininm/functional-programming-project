@@ -75,6 +75,7 @@ sequenceOfCom =
 statement :: Parser Com
 statement = assignStmt
 		<|> ifElseStmt
+		<|> whileStmt
 
 assignStmt :: Parser Com
 assignStmt =
@@ -93,6 +94,15 @@ ifElseStmt =
 	reserved "else"
 	seqCom2 <- comParser
 	return $ IfElse expr seqCom1 seqCom2
+
+whileStmt :: Parser Com
+whileStmt =
+	do
+	reserved "while"
+	expr <- coreExpression
+	reserved "do"
+	seqCom <- comParser
+	return $ While expr seqCom
 
 
 
