@@ -68,14 +68,15 @@ comParser = braces sequenceOfCom
 
 sequenceOfCom :: Parser Com
 sequenceOfCom =
-  do list <- (sepBy1 statement semi)
-     return $ Seq (head list) (head (tail list))
-
+	do
+	list <- (sepBy1 statement semi)
+	return $ if length list == 1 then head list else Seq (head list) (head (tail list))
 
 statement :: Parser Com
 statement = assignStmt
 		<|> ifElseStmt
 		<|> whileStmt
+		<|> declareStmt
 
 assignStmt :: Parser Com
 assignStmt =
@@ -104,7 +105,17 @@ whileStmt =
 	seqCom <- comParser
 	return $ While expr seqCom
 
-
+declareStmt :: Parser Com
+declareStmt =
+	do
+	reserved "declare"
+	str <- identifier
+	reserved "="
+	expr <- coreExpression
+	reserved "in"
+	seqCom <- comParser
+	return $ Declare str expr seqCom
+	
 
 coreExpression :: Parser Exp
 coreExpression = buildExpressionParser operators expression
