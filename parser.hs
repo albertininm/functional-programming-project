@@ -74,6 +74,7 @@ sequenceOfCom =
 
 statement :: Parser Com
 statement = assignStmt
+		<|> ifElseStmt
 
 assignStmt :: Parser Com
 assignStmt =
@@ -81,6 +82,19 @@ assignStmt =
      reservedOp ":="
      expr <- coreExpression
      return $ Assign var expr
+	 
+ifElseStmt :: Parser Com
+ifElseStmt = 
+	do
+	reserved "if"
+	expr <- coreExpression
+	reserved "then"
+	seqCom1 <- comParser
+	reserved "else"
+	seqCom2 <- comParser
+	return $ IfElse expr seqCom1 seqCom2
+
+
 
 coreExpression :: Parser Exp
 coreExpression = buildExpressionParser operators expression
