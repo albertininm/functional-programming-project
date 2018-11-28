@@ -12,7 +12,7 @@ data Op = Greater | Less | Equals | Plus | Minus | Times | Divide deriving Show
 
 data Com = Assign String Exp
   | Declare String Exp Com
-  | Seq Com Com
+  | Seq [Com]
   | IfElse Exp Com Com
   | While Exp Com
   | Print Exp
@@ -70,7 +70,7 @@ sequenceOfCom :: Parser Com
 sequenceOfCom =
 	do
 	list <- (sepBy1 statement semi)
-	return $ if length list == 1 then head list else Seq (head list) (head (tail list))
+	return $ if length list == 1 then head list else Seq list
 
 statement :: Parser Com
 statement = assignStmt
