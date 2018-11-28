@@ -5,6 +5,8 @@ import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
+import System.IO
+import Data.Char
 
 
 data Exp = ExpC Op Exp Exp | Var String | Number Integer deriving Show
@@ -15,7 +17,7 @@ data Com = Assign String Exp
   | Seq [Com]
   | IfElse Exp Com Com
   | While Exp Com
-  | Print Exp
+  | Printe Exp
   deriving Show
 
   
@@ -33,7 +35,7 @@ languageDef =
                                       , "do"
                                       , "declare"
                                       , "in"
-                                      , "print"
+                                      , "printe"
 
                                       ]
             , Token.reservedOpNames = ["+", "-", "*", "/", "=", ":="
@@ -116,6 +118,13 @@ declareStmt =
 	seqCom <- comParser
 	return $ Declare str expr seqCom
 	
+printeStmt :: Parser Com
+printeStmt =
+	do
+	reserved "printe"
+	expr <- coreExpression
+	return $ Printe expr
+	
 
 coreExpression :: Parser Exp
 coreExpression = buildExpressionParser operators expression
@@ -146,3 +155,143 @@ parseFile file =
        Left e  -> print e >> fail "parse error"
        Right r -> return r
 -- ast <- parseFile "<filename>"
+
+
+
+
+
+type Env = [(String, Int)]
+
+newtype M a = StOut (Env -> (a, Env, String))
+
+unStOut (StOut f) = f
+
+-- Defining M as instance of Functor, Applicative and Monad
+
+instance Functor M where
+  --fmap :: (a->b) -> M a -> M b
+  fmap f m = StOut (\s -> let (a, st, str) = unStOut m s in (f a, st, str))
+
+instance Applicative M where
+  -- pure :: a -> M a
+  pure a = StOut (\s -> (a, s, []))
+
+  -- <*> :: M (a -> b) -> M a -> M b
+  mf <*> ma = StOut (\s -> 
+    let (a, st, str) = unStOut mf s in 
+      let (a', st', str') = unStOut ma st in (a a', st', str'))
+
+instance Monad M where
+  -- (return) :: a -> Ma
+  return x = pure x
+
+  -- (>>=) :: M a -> (a -> M b) -> M b
+  ma >>= f = StOut (\s -> let (a, s1, str1) = (unStOut ma) s 
+                              (b, s2, str2) = unStOut (f a) s
+                              in (b, s2, str1++str2))
+
+
+position :: String -> Env -> Int
+position name env = positionAux name env 1
+
+positionAux :: String -> Env -> Int -> Int
+positionAux _ [] _ = -1
+positionAux name ((n, v):ns) counter = if name == n
+                                then counter
+                                else positionAux name ns (counter+1)
+
+fetch :: Int -> Env -> Int
+fetch _ [] = -1
+fetch n ((k, v):ss) = if n == 1 then v
+                 else fetch (n-1) ss
+
+getFrom :: String -> Env -> M Int
+getFrom v env = StOut (\s -> ((fetch (position v env) env), s,[]))
+
+write :: String -> Int -> Env -> M ()
+write var val env = do
+  StOut (\s -> let updatedEnv = writeValue var val env in (val, updatedEnv, ""))
+  return ()
+
+writeValue :: String -> Int -> Env -> Env
+writeValue var val [] = [(var, val)]
+writeValue var val ((name, value):ss) | (name == var) = ((var, val):ss)
+                                      | otherwise = [(name, value)] ++ (writeValue var val ss)
+
+eval1 :: Exp -> Env -> M Int
+eval1 exp env = case exp of
+ |  | Equals | Plus | Minus | Times | Divide 
+  Var x -> getFrom x env
+  ExpC Minus exp1 exp2 -> do {
+    val1 <- (eval1 exp1 env);
+    val2 <- (eval1 exp2 env);
+    return (val1 - val2)
+  }
+  ExpC Plus exp1 exp2 -> do {
+    val1 <- (eval1 exp1 env);
+    val2 <- (eval1 exp2 env);
+    return (val1 + val2)
+  }
+  ExpC Greater exp1 exp2 -> do {
+    val1 <- (eval1 exp1 env);
+    val2 <- (eval1 exp2 env);
+    return (val1 > val2)
+  }
+  ExpC Less exp1 exp2 -> do {
+    val1 <- (eval1 exp1 env);
+    val2 <- (eval1 exp2 env);
+    return (val1 < val2)
+  }
+  ExpC Equals exp1 exp2 -> do {
+    val1 <- (eval1 exp1 env);
+    val2 <- (eval1 exp2 env);
+    return (val1 == val2)
+  }
+  ExpC Times exp1 exp2 -> do {
+      val1 <- (eval1 exp1 env);
+      val2 <- (eval1 exp2 env);
+      return (val1 * val2)
+  }
+  ExpC Divide exp1 exp2 -> do {
+      val1 <- (eval1 exp1 env);
+      val2 <- (eval1 exp2 env);
+      return (val1 / val2)
+  }
+
+exec :: Com -> Env -> M ()
+exec stmt env = case stmt of
+  Assign var exp -> do {
+    res <- eval1 exp env;
+    write var res env;
+    return ()
+  }
+  Seq cmdList -> do {
+	[exec cmd env | cmd<-cmdList]
+    return ()
+  }
+  Printe exp -> do {
+    res <- eval1 exp env;
+    output res;
+  }
+  Declare var exp cmd -> do {
+    val <- eval1 exp env;
+    write var val env;
+    x <- exec cmd env;
+    return ()
+  }
+  IfElse exp cmd1 cmd2 -> do {
+    val <- eval1 exp env;
+    if val /= 0
+      then exec cmd1 env;
+      else exec cmd2 env;
+  }
+  While exp cmd -> do {
+    val <- eval1 exp env;
+    if val == True
+      then exec cmd env;
+      else return ()
+  }
+
+
+output :: Show a => a -> M()
+output v = StOut (\n -> ((), n, show v))
