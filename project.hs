@@ -190,7 +190,7 @@ instance Monad M where
   -- (>>=) :: M a -> (a -> M b) -> M b
   ma >>= f = StOut (\s -> let (a, s1, str1) = (unStOut ma) s 
                               (b, s2, str2) = unStOut (f a) s
-                              in (b, s2, str1++str2))
+                              in (b, s1++s2, str1++str2))
 
 
 position :: String -> Env -> Integer
